@@ -7,9 +7,24 @@ from multiprocessing.shared_memory import SharedMemory
 from nanovllm.config import Config
 from nanovllm.engine.sequence import Sequence
 from nanovllm.models.qwen3 import Qwen3ForCausalLM
+from nanovllm.models.qwen3_moe import Qwen3MoeForCausalLM
 from nanovllm.layers.sampler import Sampler
 from nanovllm.utils.context import set_context, get_context, reset_context
 from nanovllm.utils.loader import load_model
+
+
+def get_model_class(hf_config):
+    """
+    根据 HuggingFace 配置自动选择模型类
+    
+    判断逻辑：
+    - 如果配置中有 num_experts 且 > 0，使用 MoE 模型
+    - 否则使用 Dense 模型
+    """
+    num_experts = getattr(hf_config, 'num_experts', 0)
+    if num_experts > 0:
+        return Qwen3MoeForCausalLM
+    return Qwen3ForCausalLM
 
 
 class ModelRunner:
@@ -28,7 +43,8 @@ class ModelRunner:
         default_dtype = torch.get_default_dtype()
         torch.set_default_dtype(hf_config.torch_dtype)
         torch.set_default_device("cuda")
-        self.model = Qwen3ForCausalLM(hf_config)
+        model_class = get_model_class(hf_config)
+        self.model = model_class(hf_config)
         load_model(self.model, config.model)
         self.sampler = Sampler()
         self.warmup_model()
